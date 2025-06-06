@@ -9,7 +9,7 @@ const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 // Konfigurasi Swagger
 const swaggerOptions = {
@@ -22,9 +22,13 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${port}`,
-        description: 'Development server',
+        url: 'https://api-buku-production.up.railway.app',
+        description: 'Railway Production Server',
       },
+      {
+        url: 'http://localhost:3000',
+        description: 'Local Development Server',
+      }
     ],
   },
   apis: ['./index.js'], // Path ke file yang berisi anotasi
