@@ -5,9 +5,33 @@ const multer = require('multer');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const fs = require('fs');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Konfigurasi Swagger
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'API Buku',
+      version: '1.0.0',
+      description: 'API untuk manajemen buku',
+    },
+    servers: [
+      {
+        url: `http://localhost:${port}`,
+        description: 'Development server',
+      },
+    ],
+  },
+  apis: ['./index.js'], // Path ke file yang berisi anotasi
+};
+
+const swaggerDocs = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Middleware
 app.use(cors());
@@ -40,7 +64,36 @@ const pool = mysql.createPool({
 });
 
 // Routes
-// GET semua buku
+/**
+ * @swagger
+ * /buku:
+ *   get:
+ *     summary: Mendapatkan semua buku
+ *     tags: [Buku]
+ *     responses:
+ *       200:
+ *         description: Daftar buku berhasil diambil
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   judul:
+ *                     type: string
+ *                   deskripsi:
+ *                     type: string
+ *                   author:
+ *                     type: string
+ *                   coverId:
+ *                     type: string
+ *                   progres:
+ *                     type: string
+ *                     enum: [belum_baca, sedang_baca, sudah_baca]
+ */
 app.get('/buku', async (req, res) => {
     try {
         const [rows] = await pool.query('SELECT * FROM buku');
@@ -50,7 +103,35 @@ app.get('/buku', async (req, res) => {
     }
 });
 
-// POST buku baru
+/**
+ * @swagger
+ * /buku:
+ *   post:
+ *     summary: Menambahkan buku baru
+ *     tags: [Buku]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               judul:
+ *                 type: string
+ *               deskripsi:
+ *                 type: string
+ *               author:
+ *                 type: string
+ *               cover:
+ *                 type: string
+ *                 format: binary
+ *               progres:
+ *                 type: string
+ *                 enum: [belum_baca, sedang_baca, sudah_baca]
+ *     responses:
+ *       200:
+ *         description: Buku berhasil ditambahkan
+ */
 app.post('/buku', upload.single('cover'), async (req, res) => {
     try {
         const { judul, deskripsi, author, progres } = req.body;
@@ -67,7 +148,38 @@ app.post('/buku', upload.single('cover'), async (req, res) => {
     }
 });
 
-// PUT update buku
+/**
+ * @swagger
+ * /buku/{id}:
+ *   put:
+ *     summary: Mengupdate buku
+ *     tags: [Buku]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               judul:
+ *                 type: string
+ *               deskripsi:
+ *                 type: string
+ *               author:
+ *                 type: string
+ *               progres:
+ *                 type: string
+ *                 enum: [belum_baca, sedang_baca, sudah_baca]
+ *     responses:
+ *       200:
+ *         description: Buku berhasil diupdate
+ */
 app.put('/buku/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -84,7 +196,22 @@ app.put('/buku/:id', async (req, res) => {
     }
 });
 
-// DELETE buku
+/**
+ * @swagger
+ * /buku/{id}:
+ *   delete:
+ *     summary: Menghapus buku
+ *     tags: [Buku]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Buku berhasil dihapus
+ */
 app.delete('/buku/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -107,7 +234,27 @@ app.delete('/buku/:id', async (req, res) => {
     }
 });
 
-// GET cover buku
+/**
+ * @swagger
+ * /cover/{id}:
+ *   get:
+ *     summary: Mendapatkan cover buku
+ *     tags: [Cover]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: File cover buku
+ *         content:
+ *           image/*:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
 app.get('/cover/:id', (req, res) => {
     const { id } = req.params;
     const coverPath = path.join(__dirname, 'covers', id);
