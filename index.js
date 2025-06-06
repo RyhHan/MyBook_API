@@ -58,8 +58,15 @@ app.use('/api-docs', (req, res, next) => {
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'accept']
+    allowedHeaders: ['Content-Type', 'Authorization', 'accept', 'Origin', 'X-Requested-With'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
 }));
+
+// Tambahkan middleware untuk menangani preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 app.use('/covers', express.static('covers'));
 
