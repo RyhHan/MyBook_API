@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS buku (
     author VARCHAR(255) NOT NULL,
     coverId VARCHAR(255),
     progres ENUM('belum_baca', 'sedang_baca', 'sudah_baca') DEFAULT 'belum_baca',
+    email VARCHAR(255) NOT NULL,
+    isPublic BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ); 
