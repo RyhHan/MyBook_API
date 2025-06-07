@@ -348,6 +348,38 @@ app.get('/cover/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Endpoint untuk mengecek autentikasi
+app.get('/check-auth', authenticateToken, async (req, res) => {
+    try {
+        // Cek apakah email ada di database
+        const [user] = await pool.query('SELECT email FROM buku WHERE email = ? LIMIT 1', [req.userEmail]);
+        
+        if (user.length > 0) {
+            res.json({ 
+                status: 'success',
+                message: 'Autentikasi berhasil',
+                email: req.userEmail,
+                isAuthenticated: true
+            });
+        } else {
+            res.json({ 
+                status: 'success',
+                message: 'Email terdaftar',
+                email: req.userEmail,
+                isAuthenticated: true,
+                isNewUser: true
+            });
+        }
+    } catch (error) {
+        console.error('Error in GET /check-auth:', error);
+        res.status(500).json({ 
+            status: 'error', 
+            message: error.message,
+            isAuthenticated: false
+        });
+    }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
