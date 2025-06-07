@@ -54,6 +54,19 @@ app.use('/api-docs', (req, res, next) => {
     next();
 }, swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
+// Middleware untuk autentikasi
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const email = authHeader;
+
+    if (!email) {
+        return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+    }
+
+    req.userEmail = email;
+    next();
+};
+
 // Middleware
 app.use(cors({
     origin: '*',
@@ -126,11 +139,15 @@ const pool = mysql.createPool({
  *                     type: string
  *                     enum: [belum_baca, sedang_baca, sudah_baca]
  */
-app.get('/buku', async (req, res) => {
+app.get('/buku', authenticateToken, async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM buku');
+        const [rows] = await pool.query(
+            'SELECT *, (email = ?) as mine FROM buku WHERE email = ? OR isPublic = 1',
+            [req.userEmail, req.userEmail]
+        );
         res.json(rows);
     } catch (error) {
+        console.error('Error in GET /buku:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 });
@@ -164,18 +181,23 @@ app.get('/buku', async (req, res) => {
  *       200:
  *         description: Buku berhasil ditambahkan
  */
-app.post('/buku', upload.single('cover'), async (req, res) => {
+app.post('/buku', authenticateToken, upload.single('cover'), async (req, res) => {
     try {
         const { judul, deskripsi, author, progres } = req.body;
         const coverId = req.file ? req.file.filename : null;
 
         const [result] = await pool.query(
-            'INSERT INTO buku (judul, deskripsi, author, coverId, progres) VALUES (?, ?, ?, ?, ?)',
-            [judul, deskripsi, author, coverId, progres]
+            'INSERT INTO buku (judul, deskripsi, author, coverId, progres, email) VALUES (?, ?, ?, ?, ?, ?)',
+            [judul, deskripsi, author, coverId, progres, req.userEmail]
         );
 
-        res.json({ status: 'success', id: result.insertId });
+        res.json({ 
+            status: 'success', 
+            id: result.insertId,
+            message: 'Buku berhasil ditambahkan'
+        });
     } catch (error) {
+        console.error('Error in POST /buku:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 });
@@ -212,18 +234,28 @@ app.post('/buku', upload.single('cover'), async (req, res) => {
  *       200:
  *         description: Buku berhasil diupdate
  */
-app.put('/buku/:id', async (req, res) => {
+app.put('/buku/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const { judul, deskripsi, author, progres } = req.body;
+
+        // Cek kepemilikan buku
+        const [book] = await pool.query('SELECT email FROM buku WHERE id = ?', [id]);
+        if (!book.length || book[0].email !== req.userEmail) {
+            return res.status(403).json({ status: 'error', message: 'Anda tidak memiliki akses untuk mengedit buku ini' });
+        }
 
         await pool.query(
             'UPDATE buku SET judul = ?, deskripsi = ?, author = ?, progres = ? WHERE id = ?',
             [judul, deskripsi, author, progres, id]
         );
 
-        res.json({ status: 'success' });
+        res.json({ 
+            status: 'success',
+            message: 'Buku berhasil diupdate'
+        });
     } catch (error) {
+        console.error('Error in PUT /buku/:id:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 });
@@ -244,24 +276,31 @@ app.put('/buku/:id', async (req, res) => {
  *       200:
  *         description: Buku berhasil dihapus
  */
-app.delete('/buku/:id', async (req, res) => {
+app.delete('/buku/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Ambil informasi cover sebelum menghapus
-        const [rows] = await pool.query('SELECT coverId FROM buku WHERE id = ?', [id]);
-        
+        // Cek kepemilikan buku
+        const [book] = await pool.query('SELECT email, coverId FROM buku WHERE id = ?', [id]);
+        if (!book.length || book[0].email !== req.userEmail) {
+            return res.status(403).json({ status: 'error', message: 'Anda tidak memiliki akses untuk menghapus buku ini' });
+        }
+
         // Hapus file cover jika ada
-        if (rows[0]?.coverId) {
-            const coverPath = path.join(__dirname, 'covers', rows[0].coverId);
+        if (book[0].coverId) {
+            const coverPath = path.join(__dirname, 'covers', book[0].coverId);
             if (fs.existsSync(coverPath)) {
                 fs.unlinkSync(coverPath);
             }
         }
 
         await pool.query('DELETE FROM buku WHERE id = ?', [id]);
-        res.json({ status: 'success' });
+        res.json({ 
+            status: 'success',
+            message: 'Buku berhasil dihapus'
+        });
     } catch (error) {
+        console.error('Error in DELETE /buku/:id:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
 });
@@ -287,15 +326,35 @@ app.delete('/buku/:id', async (req, res) => {
  *               type: string
  *               format: binary
  */
-app.get('/cover/:id', (req, res) => {
-    const { id } = req.params;
-    const coverPath = path.join(__dirname, 'covers', id);
-    
-    if (fs.existsSync(coverPath)) {
-        res.sendFile(coverPath);
-    } else {
-        res.status(404).send('Cover tidak ditemukan');
+app.get('/cover/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Cek kepemilikan buku
+        const [book] = await pool.query('SELECT coverId, email, isPublic FROM buku WHERE id = ?', [id]);
+        if (!book.length || (book[0].email !== req.userEmail && !book[0].isPublic)) {
+            return res.status(403).json({ status: 'error', message: 'Anda tidak memiliki akses untuk melihat cover buku ini' });
+        }
+
+        const coverPath = path.join(__dirname, 'covers', book[0].coverId);
+        if (fs.existsSync(coverPath)) {
+            res.sendFile(coverPath);
+        } else {
+            res.status(404).json({ status: 'error', message: 'Cover tidak ditemukan' });
+        }
+    } catch (error) {
+        console.error('Error in GET /cover/:id:', error);
+        res.status(500).json({ status: 'error', message: error.message });
     }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({ 
+        status: 'error', 
+        message: 'Terjadi kesalahan pada server'
+    });
 });
 
 app.listen(port, () => {
